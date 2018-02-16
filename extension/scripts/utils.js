@@ -4,10 +4,12 @@
 
 var utils = window.utils || {};
 
-(function (utils, $) {
+if (!utils.defined) {
+    utils.defined = true;
+
     utils.attachPublishSubscribe = function (attachToObject) {
-        var o = $({});
-        $.each({
+        var o = jQuery({});
+        jQuery.each({
             trigger: 'publish',
             on: 'subscribe',
             off: 'unsubscribe'
@@ -30,40 +32,49 @@ var utils = window.utils || {};
      * Load a script
      *
      * @param {Object|string} cfg Configuration object or Path of the JS source
-     * @param {Document} [cfg.doc=document] Which document object to use
-     * @param {String} [cfg.parent='body'] Which tag to append to
+     * @param {Document} [cfg.doc=document] Which "document" object to use
+     * @param {String} [cfg.parent='body'] Which tag to append to (the "parent" tag value would be used if that element is available)
      * @param {String} cfg.src Path of the JS source
      * @param {Boolean} [cfg.freshCopy=true] Load a fresh JS source
     */
     utils.loadScript = function (cfg) {
         var doc = cfg.doc || document,
-            parent = (String(cfg.parent).toLowerCase() === 'head') ? 'head' : 'body',
+            parent = (function () {
+                var parent = cfg.parent || 'body';
+                if (parent === 'html') {
+                    return 'documentElement';
+                } else if (parent === 'head') {
+                    return 'head';
+                } else {
+                    return 'body';
+                }
+            }()),
+            parentEl = doc[parent] || doc['body'] || doc['head'] || doc['documentElement'],
             src = (cfg.src || cfg),
             freshCopy = (cfg.freshCopy === false) ? false : true,
-            parentTag = doc[parent] || doc['head'] || doc['body'],
             script = doc.createElement('script');
         script.src = src + (freshCopy ? '' : ('?' + Math.random()));
-        parentTag.appendChild(script);
+        parentEl.appendChild(script);
     };
 
     /*
     Parameters:
         config.cssText (required): The CSS style
+        config.doc (optional): Which "document" object to use
         config.id (optional): ID attribute for the style tag
-        config.parentTag (optional): 'body' (default) or 'head',
+        config.parentTag (optional): 'body' (default) or 'head' or 'html' (the "parentTag" value would be used if that element is available)
         config.overwriteExistingStyleTagWithSameId: Overwrite definition of existing style tag with same id, true or false (default)
         config.removeExistingStyleTagWithSameId (optional): true or false (default),
-            applicable only if "id" parameter is also specified,
-            requires jQuery (no error would be caused if jQuery is not added)
+            applicable only if "id" parameter is also specified
     */
     utils.addStyleTag = function (config) {
-        var id = config.id;
+        var doc = config.doc || document,
+            id = config.id;
         if (id) {
             var removeExistingStyleTag = config.removeExistingStyleTagWithSameId;
             if (removeExistingStyleTag === true) {
-                if (window.jQuery) {
-                    jQuery('style#' + id).remove();
-                }
+                var existingStyleTag = utils.gEBI(id);
+                existingStyleTag.parentNode.removeChild(existingStyleTag);
             }
         }
 
@@ -75,33 +86,34 @@ var utils = window.utils || {};
         if (styleNode) {
             // do nothing
         } else {
-            styleNode = document.createElement('style');
+            styleNode = doc.createElement('style');
             styleNode.type = 'text/css';
             if (id) {
                 styleNode.id = id;
             }
         }
-        var attributes = config.attributes || [],
-            $styleNode = jQuery(styleNode);
+        var attributes = config.attributes || [];
         attributes.forEach(function (attribute) {
-            $styleNode.attr(attribute.name, attribute.value);
+            styleNode.setAttribute(attribute.name, attribute.value);
         });
 
         var cssText = config.cssText;
-        /* browser detection (based on prototype.js) */
-        if (window.attachEvent && !window.opera) {
-            styleNode.styleSheet.cssText = cssText;
-        } else {
-            styleNode.innerHTML = '';
-            styleNode.appendChild(document.createTextNode(cssText));
-        }
+        styleNode.innerHTML = '';
+        styleNode.appendChild(doc.createTextNode(cssText));
 
-        var parentTag = 'body';
-        if (config.parentTag && config.parentTag.toLowerCase() === 'head') {
-            parentTag = 'head';
-        }
+        var parent = (function () {
+            var parentTag = config.parentTag || 'body';
+            if (parentTag === 'html') {
+                return 'documentElement';
+            } else if (parentTag === 'head') {
+                return 'head';
+            } else {
+                return 'body';
+            }
+        }());
+        var parentEl = doc[parent] || doc['body'] || doc['head'] || doc['documentElement'];
 
-        utils.gEBTN(parentTag)[0].appendChild(styleNode);
+        parentEl.appendChild(styleNode);
 
         var disabled = config.disabled;
         if (disabled) {
@@ -122,7 +134,7 @@ var utils = window.utils || {};
         if (typeof proto.firstExecution == 'undefined') {
             proto.firstExecution = true;
 
-            proto.applyTag = function () {
+            proto.applyTag = function (cb) {
                 utils.addStyleTag({
                     attributes: config.attributes,
                     cssText: this.cssText,
@@ -132,6 +144,7 @@ var utils = window.utils || {};
                     removeExistingStyleTagWithSameId: this.removeExistingStyleTagWithSameId,
                     disabled: this.disabled
                 });
+                cb && cb(this.cssText);
             };
 
             proto.disable = function () {
@@ -229,7 +242,7 @@ var utils = window.utils || {};
     utils.alertNote = (function () {
         var w = window,
             d = document,
-            b = d.body,
+            dE = d.documentElement,
             div = d.createElement('div'),
             t;
         div.id = 'topCenterAlertNote';
@@ -243,19 +256,24 @@ var utils = window.utils || {};
             w.clearTimeout(t);
         };
 
-        var alertNote = function (msg, hideDelay) {
+        var alertNote = function (msg, hideDelay, options) {
+            options = options || {};
+            var alignment = options.alignment || 'center',
+                margin = options.margin || '0 10px',
+                opacity = options.opacity || '1';
             // TODO:
             // - Apply !important for various inline styles (otherwise, it might get over-ridden by some previously present !important CSS styles)
             // - "OK" button functionality
 
             /*eslint-disable indent */
             div.innerHTML = [
-                '<div style="position:fixed;left:0;top:0;width:100%;text-align:center;height:0;z-index:2147483647">',
-                    '<table style="display:inline-table;border-collapse:collapse;width:auto"><tr><td style="padding:0px;border:0">',
+                '<div style="position:fixed;left:0;top:0;width:100%;text-align:' + alignment + ';height:0;z-index:2147483647;opacity:' + opacity + ';">',
+                                                                                         // margin:0 is useful for some sites (eg: https://developer.chrome.com/home)
+                    '<table style="display:inline-table;border-collapse:collapse;width:auto;margin:0"><tr><td style="padding:0px;border:0">',
                                                         // background-color:#feb;
-                        '<div style="border:1px solid #eb7;background-color:#f9edbe;margin:0 10px;padding:2px 10px;max-width:980px;overflow:hidden;text-align:left;font:bold 13px Arial">',
+                        '<div style="border:1px solid #eb7;background-color:#f9edbe;margin:' + margin + ';padding:2px 10px;max-width:980px;overflow:hidden;text-align:left;font:bold 13px Arial">',
                             '<div style="clear:both">',
-                                '<div style="float:left;color:#000;text-align:center;">',
+                                '<div style="float:left;color:#000;text-align:' + alignment + ';">',
                                     msg,
                                 '</div>',
                                 // '<div style="float:right;margin-left:10px;font-weight:normal;text-decoration:underline;cursor:pointer">',
@@ -270,7 +288,7 @@ var utils = window.utils || {};
 
             div.style.display = '';     // Required when the same div element is being reused
 
-            b.appendChild(div);
+            dE.appendChild(div);
             clearTimeout();
             t = w.setTimeout(function () { h(div); }, hideDelay || 5000);
         };
@@ -365,8 +383,11 @@ var utils = window.utils || {};
         //         }
         //     });
     };
-}(utils, jQuery));
+}
 
-(function($){
-    utils.attachPublishSubscribe($);
-}(jQuery));
+if (!utils.attachPublishSubscribeDone) {
+    if (typeof jQuery !== 'undefined') {
+        utils.attachPublishSubscribeDone = true;
+        utils.attachPublishSubscribe(jQuery);
+    }
+}

@@ -1,9 +1,9 @@
 {
   "name": "magic-css",
-  "version": "6.2.22",
+  "version": "6.2.25",
   "scripts": {
-    "lint": "./node_modules/.bin/eslint .",
     "dev-mode-3rdparty": "copy-files-from-to copy-third-party-front-end-scripts.json dev",
+    "lint": "eslint .",
     "postinstall": "copy-files-from-to copy-third-party-front-end-scripts.json",
     "zip-chrome-extension": "node ./zip-extension.js chrome",
     "zip-edge-extension": "node ./zip-extension.js edge",
@@ -22,7 +22,7 @@
     "copy-files-from-to": "0.2.0",
     "cp-file": "5.0.0",
     "del": "3.0.0",
-    "eslint": "4.10.0",
+    "eslint": "4.15.0",
     "jsonfile": "4.0.0"
   }
 }
