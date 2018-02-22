@@ -1,0 +1,16 @@
+{
+  "name": "live-css-editor",
+  "version": "0.0.1",
+  "description": "Server application meant to be used along with browser extension \"Live editor for CSS, Less & Sass - Magic CSS\" for Chrome/Edge/Firefox/Opera",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Priyank Parashar",
+  "license": "MIT",
+  "dependencies": {
+    "chokidar": "^2.0.2",
+    "express": "^4.16.2",
+    "socket.io": "^2.0.4"
+  }
+}
