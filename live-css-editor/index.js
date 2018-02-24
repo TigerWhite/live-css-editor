@@ -4,6 +4,9 @@
 
 var chokidar = require('chokidar');
 var express = require('express');
+var Emitter = require('tiny-emitter');
+
+var emitter = new Emitter();
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
@@ -20,8 +23,6 @@ var log = console.log.bind(console);
 
 var watcher = chokidar.watch(
     [
-        'node_modules/async-limiter/coverage/lcov-report/base.css',
-
         '**/*.css',
         '**/*.css.*',
 
@@ -32,28 +33,63 @@ var watcher = chokidar.watch(
         '**/*.sass.*',
 
         '**/*.scss',
-        '**/*.scss.*'
+        '**/*.scss.*',
+
+        // An example path which is required to be watched, but its parent folder is ignored
+        // See below in this file: The path also needs to be "not" ignored in the "ignored" section
+        'node_modules/async-limiter/coverage/lcov-report/base.css',
     ],
     {
         ignored: [
-            '!node_modules/async-limiter/coverage/lcov-report/base.css',
-            'node_modules'
+            /(^|[/\\])\../,     // A general rule to ignore the "." files/directories
+            'node_modules',
+
+            // An example path which is required to be watched, but its parent folder is ignored
+            // See above in this file: The path also needs to be in the watchlist section
+            '!node_modules/async-limiter/coverage/lcov-report/base.css'
         ],
         // ignored: /(^|[/\\])\../,
+        ignoreInitial: true,
         persistent: true
     }
 );
 
-var watchedPaths = watcher.getWatched();
-log(watchedPaths);
+watcher.on('ready', function () {
+    var watchedPaths = watcher.getWatched();
+    log('**********Watched paths**********');
+    log(watchedPaths);
+});
+
+var fileModifiedHandler = function (changeObj) {
+    console.log(changeObj.fileName);
+    io.emit('file-modified', changeObj);
+};
+var fileAddedHandler = function (changeObj) {
+    console.log(changeObj.fileName);
+    io.emit('file-added', changeObj);
+};
+var fileDeletedHandler = function (changeObj) {
+    console.log(changeObj.fileName);
+    io.emit('file-deleted', changeObj);
+};
+
+emitter.on('file-modified', fileModifiedHandler);
+emitter.on('file-added', fileAddedHandler);
+emitter.on('file-deleted', fileDeletedHandler);
 
 watcher
-    .on('add', path => log(`File ${path} has been added`))
+    .on('add', function (path) {
+        log(`File ${path} has been added`);
+        emitter.emit('file-added', { fileName: path });
+    })
     .on('change', function (path) {
         log(`File ${path} has been changed`);
-        io.emit('file-modified', { fileName: path });
+        emitter.emit('file-modified', { fileName: path });
     })
-    .on('unlink', path => log(`File ${path} has been removed`));
+    .on('unlink', function (path) {
+        log(`File ${path} has been removed`);
+        emitter.emit('file-deleted', { fileName: path });
+    });
 
 io.on('connection', function(socket) {
     console.log('a user connected');
@@ -61,8 +97,6 @@ io.on('connection', function(socket) {
     // socket.on('chat message', function(msg){
     //     console.log('message: ' + msg);
     // });
-
-    io.emit('file-modified', { fileName: 'abc.css' });
 
     socket.on('disconnect', function(){
         console.log('user disconnected');
