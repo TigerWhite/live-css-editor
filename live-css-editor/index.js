@@ -5,15 +5,29 @@
 var chokidar = require('chokidar');
 var express = require('express');
 var Emitter = require('tiny-emitter');
-var chalk = require('chalk');
+// var chalk = require('chalk');
 
 var emitter = new Emitter();
 var app = express();
 var http = require('http').Server(app);
 var io = require('socket.io')(http);
 
+var os = require('os');
+var logger = require('note-down'),
+    localIpAddresses = require('local-ip-addresses');
+
+// var getPort = require('get-port');
+var findFreePort = require('find-free-port');
+
+var argv = require('yargs').argv;
+
+var verboseLogging = false;
+if (argv.v || argv.verbose) {
+    verboseLogging = true;
+}
+
 // var verboseLogging = false;
-var verboseLogging = true;
+// var verboseLogging = true;
 
 var connectedSessions = 0;
 
@@ -68,9 +82,9 @@ var fileAddedHandler = function (changeObj) {
     filesBeingWatched++;
     if (verboseLogging) {
         if (filesBeingWatched === 1) {
-            console.log(chalk.green('Live CSS Editor (Magic CSS) is watching the following file(s):'));
+            logger.success('Live CSS Editor (Magic CSS) is watching the following file(s):');
         }
-        console.log('    ' + changeObj.fileName);
+        logger.log('    ' + changeObj.fileName);
     }
     io.emit('file-added', changeObj);
 };
@@ -85,7 +99,7 @@ emitter.on('file-added', fileAddedHandler);
 emitter.on('file-deleted', fileDeletedHandler);
 
 emitter.on('file-watch-ready', function () {
-    console.log(chalk.green('Live CSS Editor (Magic CSS) is watching ' + filesBeingWatched + ' files.'));
+    logger.success('Live CSS Editor (Magic CSS) is watching ' + filesBeingWatched + ' files.');
 });
 
 watcher.on('ready', function () {
@@ -97,18 +111,18 @@ watcher.on('ready', function () {
 
 
 var printSessionCount = function (connectedSessions) {
-    console.log(chalk.blue('Number of active connections: ' + connectedSessions));
+    logger.info('Number of active connections: ' + connectedSessions);
 };
 
 emitter.on('connected-socket', function () {
     connectedSessions++;
-    console.log(chalk.blue('Connected to a socket.'));
+    logger.info('Connected to a socket.');
     printSessionCount(connectedSessions);
 });
 
 emitter.on('disconnected-socket', function () {
     connectedSessions--;
-    console.log(chalk.blue('Disconnected from a socket.'));
+    logger.info('Disconnected from a socket.');
     printSessionCount(connectedSessions);
 });
 
@@ -138,6 +152,31 @@ io.on('connection', function(socket) {
     });
 });
 
-http.listen(3000, function(){
-    console.log('listening on *:3000');
+findFreePort(4000, function(err, freePort) {
+    logger.info(
+        '\nLive CSS Editor (Magic CSS) is available at any of the following addresses:\n' +
+        (function (ipAddresses) {
+            var host = os.hostname(),
+                addresses = [];
+            addresses = addresses.concat('localhost');
+            addresses = addresses.concat(host);
+            addresses = addresses.concat(ipAddresses);
+            addresses = addresses.map(function (item) {
+                return  '    http://' + item + ':' + freePort + '/';
+            });
+            return addresses.join('\n');
+        }(localIpAddresses))
+    );
+
+    http.listen(freePort, function() {
+        // console.log('listening on *:' + freePort);
+    });
 });
+
+// getPort({port: 4000}).then(port => {
+//     http.listen(port, function(){
+//         console.log('listening on *:' + port);
+//     });
+//
+//     // Will use 3000 if available, otherwise fall back to a random port
+// });
